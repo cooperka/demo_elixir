@@ -1,6 +1,6 @@
-defmodule DemoElixir do
+defmodule KV do
   @moduledoc """
-  Documentation for DemoElixir.
+  Documentation for KV.
   """
 
   @doc """
@@ -8,7 +8,7 @@ defmodule DemoElixir do
 
   ## Examples
 
-      iex> DemoElixir.hello
+      iex> KV.hello
       :world
 
   """
