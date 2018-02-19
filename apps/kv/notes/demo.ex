@@ -328,5 +328,130 @@ whereami 20
 https://hexdocs.pm/iex/IEx.Helpers.html#content
 
 # GUI
-:debugger.start()
-:observer.start()
+:debugger.start
+:observer.start
+
+---
+
+# Quote macro
+# Function name, metadata, arguments.
+
+quote do: sum(1, 2, 3)
+{:sum, [], [1, 2, 3]}
+
+quote do: %{1 => 2}
+{:%{}, [], [{1, 2}]}
+
+quote do: 1 + 2
+{:+, [context: Elixir, import: Kernel], [1, 2]}
+
+Macro.to_string(quote do: sum(1, 2 + 3, 4))
+"sum(1, 2 + 3, 4)"
+
+number = 13
+Macro.to_string(quote do: 11 + unquote(number))
+"11 + 13"
+
+inner = [3, 4, 5]
+Macro.to_string(quote do: [1, 2, unquote_splicing(inner), 6])
+"[1, 2, 3, 4, 5, 6]"
+
+Macro.escape(%{1 => 2})
+{:%{}, [], [{1, 2}]}
+
+# Identity (same when quoted and unquoted):
+:foo         #=> Atoms
+1.0          #=> Numbers
+[1, 2]       #=> Lists
+"strings"    #=> Strings
+{key, value} #=> Tuples with two elements
+
+---
+
+# Macros receive quoted expressions and must return quoted expressions.
+
+defmodule Unless do
+  def fun_unless(clause, do: expression) do
+    if !clause, do: expression
+  end
+
+  defmacro macro_unless(clause, do: expression) do
+    quote do
+      if !unquote(clause), do: unquote(expression)
+    end
+  end
+end
+
+Unless.macro_unless true, do: IO.puts "this should never be printed"
+
+defmodule Sample do
+  defmacro initialize_to_char_count(variables) do
+    Enum.map variables, fn(name) ->
+      var = Macro.var(name, nil)
+      length = name |> Atom.to_string |> String.length
+      quote do
+        unquote(var) = unquote(length)
+      end
+    end
+  end
+
+  def run do
+    initialize_to_char_count [:red, :green, :yellow]
+    [red, green, yellow]
+  end
+end
+
+Sample.run
+[3, 5, 6]
+
+---
+
+# Domain-specific languages (DSL)
+
+defmodule TestCase do
+  @doc false
+  defmacro __using__(_opts) do
+    quote do
+      import TestCase
+
+      # Initialize @tests to an empty list
+      @tests []
+
+      # Invoke TestCase.__before_compile__/1 before the module is compiled
+      @before_compile TestCase
+    end
+  end
+
+  @doc """
+  Defines a test case with the given description.
+
+  ## Examples
+
+      test "arithmetic operations" do
+        4 = 2 + 2
+      end
+
+  """
+  defmacro test(description, do: block) do
+    function_name = String.to_atom("test " <> description)
+    quote do
+      # Prepend the newly defined test to the list of tests
+      @tests [unquote(function_name) | @tests]
+      def unquote(function_name)(), do: unquote(block)
+    end
+  end
+
+  # This will be invoked right before the target module is compiled
+  # giving us the perfect opportunity to inject the `run/0` function
+  @doc false
+  defmacro __before_compile__(_env) do
+    quote do
+      def run do
+        Enum.each @tests, fn name ->
+          IO.puts "Running #{name}"
+          apply(__MODULE__, name, [])
+        end
+      end
+    end
+  end
+end
